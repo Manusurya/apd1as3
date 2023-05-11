@@ -131,7 +131,121 @@ plt.xlabel('Countries')
 plt.ylabel('Concentration')
 plt.show()
 
+#adding the cluster label column to the dataframe
+co2_1['labels']=labels
+
+#making a list of years required for curve fitting
+yers= [35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50]
+#reading in the data for curve fitting
+gdp_1, gdp_2 = read_file("API_EN.ATM.CO2E.PC_DS2_en_csv_v2_5358914.csv",
+                         "Indicator Name", "GDP growth (annual %)",yers)
+#adding the means column to the dataframe
+gdp_2['mean']=gdp_2.mean(axis=1)
+#adding the years column from the index
+gdp_2['years'] = gdp_2.index
+
+print(gdp_2)
+
+#Ploting the data of GDP growth (annual %)
+ax = gdp_2.plot(x = 'years', y = 'mean', figsize=(10, 5), title='Mean gdp of 100 country ', xlabel='Years', ylabel= 'Mean')
+
+def exponential(t, n0, g):
+    """defining function to calculate exponential function with scale factor n0 and growth rate g"""
+    t = t - 1999.0
+    ef = n0 * np.exp(g*t)
+    return ef
 
 
+#converting string type years to numeric type
+gdp_2["years"] = pd.to_numeric(gdp_2["years"])
+
+#fitting exponential fit
+param, covar = opt.curve_fit(exponential, gdp_2["years"], gdp_2["mean"],p0=(1993.0, 1.9149))
+
+gdp_2["fit"] = exponential(gdp_2["years"], *param)
+
+gdp_2.plot("years", ["mean", "fit"],
+           title='Data fitting using exponential function',
+           figsize=(10, 5))
+plt.show()
+print(gdp_2)
+
+def logistic(t, n0, g, t0):
+    """Calculates the logistic function with scale factor n0 and growth rate g"""
+    f = n0 / (1 + np.exp(-g*(t - t0)))
+    return f
 
 
+#fitting logistic fit
+param, covar = opt.curve_fit(logistic, gdp_2["years"], gdp_2["mean"],
+                             p0=(3e12, 1.9149, 1993.0), maxfev=5000)
+
+sigma = np.sqrt(np.diag(covar))
+print("parameters:", param)
+print("std. dev.", sigma)
+gdp_2["logistic function fit"] = logistic(gdp_2["years"], *param)
+gdp_2.plot("years", ["mean", "fit"],
+           title='Data fitting using logistic function',
+           figsize=(10, 5))
+plt.show()
+
+#predicting GDP/year over the years till 2020
+year = np.arange(1990, 2020)
+print(year)
+forecast = logistic(year, *param)
+print('forecast=',forecast)
+
+
+#using plt function to plot the required plots
+plt.figure()
+plt.plot(gdp_2["years"], gdp_2["mean"], label="GDP")
+plt.plot(year, forecast, label="forecast")
+plt.xlabel("year")
+plt.ylabel("GDP/year")
+plt.legend()
+plt.title('Prediction of GDP from 1990 to 2020')
+plt.show()
+
+#using the given err_ranges function
+def err_ranges(x, func, param, sigma):
+    """
+    Calculates the upper and lower limits for the function, parameters and
+    sigmas for single value or array x. Functions values are calculated for 
+    all combinations of +/- sigma and the minimum and maximum is determined.
+    Can be used for all number of parameters and sigmas >=1.
+    
+    This routine can be used in assignment programs.
+    """
+
+    import itertools as iter
+    
+    # initiate arrays for lower and upper limits
+    lower = func(x, *param)
+    upper = lower
+    
+    uplow = []   # list to hold upper and lower limits for parameters
+    for p, s in zip(param, sigma):
+        pmin = p - s
+        pmax = p + s
+        uplow.append((pmin, pmax))
+        
+    pmix = list(iter.product(*uplow))
+    
+    for p in pmix:
+        y = func(x, *p)
+        lower = np.minimum(lower, y)
+        upper = np.maximum(upper, y)
+        
+    return lower, upper
+
+low, up = err_ranges(year, logistic, param, sigma)
+
+#plotting using the plt function
+plt.figure()
+plt.plot(gdp_2["years"], gdp_2["mean"], label="GDP")
+plt.plot(year, forecast, label="forecast")
+plt.fill_between(year, low, up, color="cyan", alpha=0.7)
+plt.xlabel("year")
+plt.ylabel("GDP")
+plt.legend()
+plt.show()
